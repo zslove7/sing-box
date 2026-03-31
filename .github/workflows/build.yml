@@ -1,4 +1,4 @@
-name: Build Android arm64 Naive Full
+name: Build Android arm64 Naive Final
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
         id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r26b # 保持 r26b 以获得最佳兼容性
+          ndk-version: r26b # r26b 是目前处理 cronet 静态链接最稳定的版本
 
       - name: Clone cronet-go
         run: |
@@ -43,7 +43,7 @@ jobs:
 
       - name: Build Android arm64
         run: |
-          # 同时包含 with_naive 和 with_naive_outbound
+          # 包含所有你要求的标签
           TAGS="with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_gvisor,with_naive,with_naive_outbound,with_tuic,with_shadowtls"
           
           export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
@@ -57,8 +57,9 @@ jobs:
           export GOOS=android
           export GOARCH=arm64
           
-          # 关键链接参数：解决 relocation 315 错误并强制静态链接 C++ 运行时
-          export CGO_LDFLAGS="-Wl,--allow-shlib-undefined -fuse-ld=lld"
+          # 关键修正：通过 CGO_LDFLAGS 强制链接 C++ 标准库并允许未定义符号
+          # 这能绕过 relocation 315 错误
+          export CGO_LDFLAGS="-Wl,--allow-shlib-undefined -fuse-ld=lld -lstdc++"
 
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box-android-arm64 -tags "$TAGS" \
