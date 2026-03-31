@@ -30,7 +30,7 @@ jobs:
         id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r27c # 升级到最新稳定版以适配 Android 15
+          ndk-version: r26b # 回退到 r26b 以获得最稳健的链接器表现
 
       - name: Clone cronet-go
         run: |
@@ -48,21 +48,23 @@ jobs:
           export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
           export ANDROID_CLANG=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
           
-          # 核心修正：使用 Android 15 对应的 API 35 编译器
-          export CC=$ANDROID_CLANG/aarch64-linux-android35-clang
-          export CXX=$ANDROID_CLANG/aarch64-linux-android35-clang++
+          # 关键修正：回退到 API 24
+          # API 24 的链接逻辑相对宽松，是解决 Naive 编译报错的“标准答案”
+          export CC=$ANDROID_CLANG/aarch64-linux-android24-clang
+          export CXX=$ANDROID_CLANG/aarch64-linux-android24-clang++
           
           export CGO_ENABLED=1
           export GOOS=android
           export GOARCH=arm64
           
-          # 终极修复：增加 -Wl,--no-check-dynamic-relocations 参数
-          # 针对 relocation (315) 错误，这是目前已知的最彻底的链接器压制手段
-          export CGO_LDFLAGS="-Wl,-z,notext -Wl,--allow-shlib-undefined -Wl,--no-check-dynamic-relocations -fuse-ld=lld"
+          # 核心修复参数：
+          # 1. -Wl,-z,notext: 允许只读段重定位
+          # 2. -Wl,--no-rosegment: 禁用只读段，防止符号无法写入
+          export CGO_LDFLAGS="-Wl,-z,notext -Wl,--no-rosegment -Wl,--allow-shlib-undefined -fuse-ld=lld"
 
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box-android-arm64 -tags "$TAGS" \
-          -ldflags "-s -w -X 'github.com/sagernet/sing-box/constant.Version=${{ github.event.inputs.version }}' -extldflags '-static-libstdc++ -lm -ldl -lc++_static -lc++abi'" \
+          -ldflags "-s -w -X 'github.com/sagernet/sing-box/constant.Version=${{ github.event.inputs.version }}' -extldflags '-static-libstdc++ -lm -ldl'" \
           ./cmd/sing-box
 
       - name: Upload Artifact
