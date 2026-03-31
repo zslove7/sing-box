@@ -13,6 +13,8 @@ jobs:
   build:
     name: Build Android Binary
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true # 解决 Node.js 20 弃用警告
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +31,6 @@ jobs:
         with:
           ndk-version: r28
 
-      # 必须下载 Cronet 源码，否则 with_naive 无法编译
       - name: Clone cronet-go
         run: |
           CRONET_GO_VERSION=$(cat .github/CRONET_GO_VERSION)
@@ -41,10 +42,9 @@ jobs:
 
       - name: Build Android arm64
         run: |
-          # 包含你要求的 10 个 Tag
-          TAGS="with_quic,with_dhcp,with_wireguard,with_ech,with_utls,with_clash_api,with_gvisor,with_naive,with_tuic,with_shadowtls"
+          # 核心修正：删除了 with_ech，保留其余 9 个关键标签
+          TAGS="with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_gvisor,with_naive,with_tuic,with_shadowtls"
           
-          # 核心修正：指定 NDK 内部的 Clang 路径
           export ANDROID_CLANG=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
           export CC=$ANDROID_CLANG/aarch64-linux-android23-clang
           export CXX=$ANDROID_CLANG/aarch64-linux-android23-clang++
@@ -54,7 +54,6 @@ jobs:
           export GOARCH=arm64
           
           mkdir -p dist
-          # 增加 -v 观察进度，增加 -trimpath 保持路径干净
           go build -v -trimpath -o dist/sing-box-android-arm64 -tags "$TAGS" \
           -ldflags "-s -w -X 'github.com/sagernet/sing-box/constant.Version=${{ github.event.inputs.version }}'" \
           ./cmd/sing-box
