@@ -30,7 +30,7 @@ jobs:
         id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r26b # r26b 是目前处理 cronet 静态链接最稳定的版本
+          ndk-version: r26b
 
       - name: Clone cronet-go
         run: |
@@ -43,27 +43,26 @@ jobs:
 
       - name: Build Android arm64
         run: |
-          # 包含所有你要求的标签
+          # 包含所有你要求的 10 个标签（自动处理 with_ech 弃用问题）
           TAGS="with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_gvisor,with_naive,with_naive_outbound,with_tuic,with_shadowtls"
           
           export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
           export ANDROID_CLANG=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
           
-          # 使用 API 26 编译器
-          export CC=$ANDROID_CLANG/aarch64-linux-android26-clang
-          export CXX=$ANDROID_CLANG/aarch64-linux-android26-clang++
+          # 提高 API Level 到 30，增强对新版 cronet 静态库的链接支持
+          export CC=$ANDROID_CLANG/aarch64-linux-android30-clang
+          export CXX=$ANDROID_CLANG/aarch64-linux-android30-clang++
           
           export CGO_ENABLED=1
           export GOOS=android
           export GOARCH=arm64
           
-          # 关键修正：通过 CGO_LDFLAGS 强制链接 C++ 标准库并允许未定义符号
-          # 这能绕过 relocation 315 错误
-          export CGO_LDFLAGS="-Wl,--allow-shlib-undefined -fuse-ld=lld -lstdc++"
+          # 关键链接参数：-Wl,-z,notext 专门用于强制跳过 relocation (315) 错误检查
+          export CGO_LDFLAGS="-Wl,-z,notext -Wl,--allow-shlib-undefined -fuse-ld=lld"
 
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box-android-arm64 -tags "$TAGS" \
-          -ldflags "-s -w -X 'github.com/sagernet/sing-box/constant.Version=${{ github.event.inputs.version }}' -extldflags '-static-libstdc++'" \
+          -ldflags "-s -w -X 'github.com/sagernet/sing-box/constant.Version=${{ github.event.inputs.version }}' -extldflags '-static-libstdc++ -lm -ldl'" \
           ./cmd/sing-box
 
       - name: Upload Artifact
