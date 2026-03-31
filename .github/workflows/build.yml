@@ -1,16 +1,16 @@
-name: Build Android arm64
+name: Build Android arm64 Full
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version name"
+        description: "输入版本号 (例如 1.13.5)"
         required: true
         type: string
         default: "1.13.5"
 
 jobs:
-  build:
+  build_android:
     name: Build Android Binary
     runs-on: ubuntu-latest
     steps:
@@ -43,27 +43,26 @@ jobs:
         run: |
           set -xeuo pipefail
           
-          # 强制包含 naive 及其 outbound 标签
+          # 1. 强制声明所有必要的 Tags
           TAGS="with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_gvisor,with_naive,with_naive_outbound,with_tuic,with_shadowtls"
           
-          # 核心修正：提升 API Level 到 26 以支持新的链接重定位格式 (relocation 315)
+          # 2. 设置 NDK 路径（API 28 以支持 PAC 重定位）
           export ANDROID_CLANG=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
-          export CC=$ANDROID_CLANG/aarch64-linux-android26-clang
-          export CXX=$ANDROID_CLANG/aarch64-linux-android26-clang++
+          export CC=$ANDROID_CLANG/aarch64-linux-android28-clang
+          export CXX=$ANDROID_CLANG/aarch64-linux-android28-clang++
           
+          # 3. 环境变量
           export CGO_ENABLED=1
           export GOOS=android
           export GOARCH=arm64
-          
-          # 显式指定 LLD 链接器
           export LD=$ANDROID_CLANG/ld.lld
 
           mkdir -p dist
           
-          # 使用 -extldflags 确保编译器使用正确的链接器
+          # 4. 关键编译指令：显式链接 C++ 运行库并强制使用 lld
           go build -v -trimpath -o dist/sing-box-android-arm64 \
           -tags "$TAGS" \
-          -ldflags "-s -w -X 'github.com/sagernet/sing-box/constant.Version=${{ github.event.inputs.version }}' -extldflags=-fuse-ld=lld" \
+          -ldflags "-s -w -X 'github.com/sagernet/sing-box/constant.Version=${{ github.event.inputs.version }}' -extldflags=-fuse-ld=lld -extldflags=-static-libstdc++" \
           ./cmd/sing-box
 
       - name: Upload Artifact
